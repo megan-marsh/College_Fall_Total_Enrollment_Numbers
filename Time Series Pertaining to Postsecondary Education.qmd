@@ -1,0 +1,318 @@
+---
+title: "Time Series Pertaining to Postsecondary Enrollment"
+format: html
+editor: visual
+---
+
+
+**Preliminary Analysis**
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+
+file_path <- "Time Series Data Set - Total Enrollment - Time Series Data Set - Total Enrollment.csv"
+total_enrollment_dataset <- read.csv(file_path)
+
+print(str(total_enrollment_dataset))
+
+print(head(total_enrollment_dataset))
+
+#cleaning dataset
+total_enrollment_dataset <- total_enrollment_dataset %>%
+  select(-starts_with("Unnamed:"))
+
+#convert total enrollment to numeric and NAs for non-numeric data
+total_enrollment_dataset$TotalEnrollment <- as.numeric(as.character(total_enrollment_dataset$TotalEnrollment))
+
+#remove NAs
+total_enrollment_dataset <- total_enrollment_dataset %>%
+  drop_na(TotalEnrollment)
+
+#aggregate total enrollment by year
+yearly_enrollment <- total_enrollment_dataset %>%
+  group_by(Year) %>%
+  summarise(TotalEnrollment = sum(TotalEnrollment, na.rm = TRUE)) %>%
+  ungroup() %>%
+  arrange(Year)
+
+na.omit(yearly_enrollment)
+
+print(head(yearly_enrollment))
+print(tail(yearly_enrollment))
+
+#verify structure
+print(str(yearly_enrollment))
+```
+
+
+```{r}
+library(TSA)
+
+#time series plot of total enrollment (look for trends, seasonality, and stationarity)
+ts_total_enrollment <- ggplot(yearly_enrollment, aes(x = Year, y = TotalEnrollment)) +
+  geom_line(color = "mediumpurple", size = 1) + 
+  geom_point(color = "plum", size = 2) + 
+  labs(
+    title = "Total Fall Post-Secondary Enrollment in Ohio Over Time (2003-2023)",
+    x = "Year",
+    y = "Total Enrollment"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+        axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+print(ts_total_enrollment)
+ggsave("TS_Total_Enrollment.pdf", plot = ts_total_enrollment, width = 8, height = 6, units = "in")
+
+#histogram of total enrollment showing distribution (indicating skewness, modality, and spread)
+histogram_total_enrollment <- ggplot(yearly_enrollment, aes(x = TotalEnrollment)) +
+  geom_histogram(binwidth = 20000, fill = "pink", color = "hotpink", alpha = 0.7) +
+  labs(
+    title = "Distribution of Total Fall Postsecondary Enrollment in Ohio",
+    x = "Total Enrollment",
+    y = "Frequency"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+print(histogram_total_enrollment)
+ggsave("Histogram_Total_Enrollment.pdf", plot = histogram_total_enrollment, width = 8, height = 6, units = "in")
+
+hd_total_enrollment <- ggplot(yearly_enrollment, aes(x = TotalEnrollment)) +
+  geom_histogram(aes(y = after_stat(density)), # IMPORTANT: Plots histogram as density
+                 binwidth = 20000,
+                 fill = "skyblue",
+                 color = "darkblue",
+                 alpha = 0.7) +
+  geom_density(color = "red", linewidth = 1) + # This is your density curve!
+  labs(
+    title = "Distribution of Total Fall Postsecondary Enrollment in Ohio with Density Curve",
+    x = "Total Enrollment",
+    y = "Density" # Reflects the y-axis now represents density
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+#print the histogram with density curve
+print(hd_total_enrollment)
+ggsave("HistogramWithDC_Total_Enrollment.pdf", plot = hd_total_enrollment, width = 8, height = 6, units = "in")
+
+#box plot to find outliers
+bp_total_enrollment <- ggplot(yearly_enrollment, aes(y = TotalEnrollment)) +
+  geom_boxplot(fill = "lightgreen", color = "darkgreen") + 
+  labs(
+    title = "Box Plot of Total Fall Postsecondary Enrollment in Ohio",
+    y = "Total Enrollment"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+print(bp_total_enrollment)
+ggsave("BoxPlot_Total_Enrollment.pdf", plot = bp_total_enrollment, width = 8, height = 6, units = "in")
+
+#find the 5-number summary
+five_number_summary_total_enrollment <- summary(yearly_enrollment$TotalEnrollment)
+
+
+print(five_number_summary_total_enrollment)
+
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+
+start_year <- min(yearly_enrollment$Year)
+enrollment_ts <- ts(yearly_enrollment$TotalEnrollment, start = start_year, frequency = 1)
+
+#ACF Plot
+acf(enrollment_ts, main = "Autocorrelation Function (ACF) of Total Enrollment")
+
+#PACF Plot
+pacf(enrollment_ts, main = "Partial Autocorrelation Function (PACF) of Total Enrollment")
+
+#EACF Plot
+eacf(enrollment_ts, ar.max = 4, ma.max = 4)
+
+#QQ Plot
+qqnorm(enrollment_ts, main = "Normal Q-Q Plot of Total Enrollment")
+qqline(enrollment_ts, color="orange")
+```
+
+```{r}
+#make pdf files for project
+pdf("acf_enrollment.pdf") 
+acf(enrollment_ts, main = "Autocorrelation Function (ACF) of Total Enrollment")
+dev.off() 
+
+pdf("pacf_enrollment.pdf")
+pacf(enrollment_ts, main = "Partial Autocorrelation Function (PACF) of Total Enrollment")
+dev.off() 
+
+pdf("eacf_enrollment.pdf")
+eacf(enrollment_ts, ar.max = 4, ma.max = 4)
+dev.off()
+
+pdf("qqnorm_enrollment.pdf")
+qqnorm(enrollment_ts, main = "Normal Q-Q Plot of Total Enrollment")
+qqline(enrollment_ts)
+dev.off() 
+```
+
+**Secondary Analysis**
+
+
+```{r}
+library(tseries)
+#first-order differencing to achieve stationarity
+diff_enrollment_ts <- diff(enrollment_ts, differences = 1)
+
+acf(diff_enrollment_ts, main = "Autocorrelation Function (ACF) of Differenced Total Enrollment")
+
+pacf(diff_enrollment_ts, main = "Partial Autocorrelation Function (PACF) of Differenced Total Enrollment")
+
+eacf(diff_enrollment_ts, ar.max = 4, ma.max = 4)
+
+adf.test(diff_enrollment_ts)
+
+kpss.test(diff_enrollment_ts)
+```
+
+```{r}
+#second-order differencing to achieve stationarity
+diff_enrollment_ts_2 <- diff(enrollment_ts, differences = 2)
+
+acf(diff_enrollment_ts_2, main = "Autocorrelation Function (ACF) of Twice Differenced Total Enrollment")
+
+pacf(diff_enrollment_ts_2, main = "Partial Autocorrelation Function (PACF) of Twice Differenced Total Enrollment")
+
+eacf(diff_enrollment_ts_2, ar.max = 4, ma.max = 4)
+
+adf.test(diff_enrollment_ts_2)
+
+kpss.test(diff_enrollment_ts_2)
+```
+
+
+```{r}
+#first-order differencing of logged total enrollment to achieve stationarity and account for variance
+logged_enrollment_ts <- log(enrollment_ts)
+
+diff_logged_enrollment_ts <- diff(logged_enrollment_ts, differences = 1)
+
+acf(diff_logged_enrollment_ts, main = "ACF of Once-Differenced Logged Total Enrollment")
+
+pacf(diff_logged_enrollment_ts, main = "PACF of Once-Differenced Logged Total Enrollment")
+
+eacf(diff_logged_enrollment_ts, ar.max = 4, ma.max = 4)
+
+adf.test(diff_logged_enrollment_ts)
+
+kpss.test(diff_logged_enrollment_ts)
+```
+
+**Model #1**
+
+```{r}
+#Model 1 - systematically selected
+model1_arima_auto <- auto.arima(diff_logged_enrollment_ts, trace = TRUE, seasonal = FALSE) 
+print(model1_arima_auto)
+print(summary(model1_arima_auto))
+```
+
+**Model #2**
+```{r}
+#Model 2 - manually selected ARIMA(1,1,0) because possible AR(1) process on differenced data, shown in ACF decay and PACF significant spike at lag 1
+
+model2_arima_110 <- Arima(diff_logged_enrollment_ts, order = c(1, 1, 0))
+
+print(summary(model2_arima_110))
+```
+
+**Model #3**
+```{r}
+#Model 3- manually selected ARIMA(0,1,1) because possible MA(1) on differenced data based on significant spike in ACF plot at lag 1 and decaying PACF
+
+model3_arima_011 <- Arima(diff_logged_enrollment_ts, order = c(0, 1, 1))
+
+print(summary(model3_arima_011))
+```
+
+The lowest AIC and BIC, suggesting it's the most efficient model that captures the underlying patterns.
+
+The lowest RMSE and MAE, indicating better absolute prediction accuracy on the training set.
+
+**Comparing Models: AIC/BIC Values**
+
+```{r}
+#AIC and BIC values for each model
+model_comparison_AIC_BIC<- data.frame(
+  Model = c("auto.arima", "ARIMA(1,1,0)", "ARIMA(0,1,1)"),
+  AIC = c(model1_arima_auto$aic, model2_arima_110$aic, model3_arima_011$aic),
+  BIC = c(model1_arima_auto$bic, model2_arima_110$bic, model3_arima_011$bic)
+)
+print(model_comparison_AIC_BIC)
+```
+
+The model with the lowest AIC and BIC values hints at the model being the most efficient model that captures the underlying trends and patterns. Of the three models, the systematically auto.arima model ARIMA (1,0,0) has the lowest AIC and BIC values. As of now, Model #1 is the best of choice of the three models. 
+
+**Comparing Models: Residuals Analysis**
+```{r}
+#Model 1 residuals
+cat("\n--- Diagnostics for Model 1 (auto.arima) ---\n")
+model1_residuals <- residuals(model1_arima_auto)
+acf(model1_residuals, main = "ACF of Residuals (auto.arima)")
+pacf(model1_residuals, main = "PACF of Residuals (auto.arima)")
+qqnorm(model1_residuals, main = "Normal Q-Q Plot of Residuals (auto.arima)")
+qqline(model1_residuals, col = "blue")
+cat("Ljung-Box Test for Model 1 Residuals:\n")
+print(Box.test(model1_residuals, lag = log(length(model1_residuals)), type = "Ljung-Box"))
+cat("A high p-value (> 0.05) suggests residuals are white noise (no remaining autocorrelation).\n")
+```
+
+
+```{r}
+#Model 2 residuals
+cat("\n--- Diagnostics for Model 2 (ARIMA(1,1,0)) ---\n")
+model2_residuals <- residuals(model2_arima_110)
+acf(model2_residuals, main = "ACF of Residuals (ARIMA(1,1,0))")
+pacf(model2_residuals, main = "PACF of Residuals (ARIMA(1,1,0))")
+qqnorm(model2_residuals, main = "Normal Q-Q Plot of Residuals (ARIMA(1,1,0))")
+qqline(model2_residuals, col = "blue")
+cat("Ljung-Box Test for Model 2 Residuals:\n")
+print(Box.test(model2_residuals, lag = log(length(model2_residuals)), type = "Ljung-Box"))
+```
+
+
+```{r}
+#Model 3 residuals
+cat("\n--- Diagnostics for Model 3 (ARIMA(0,1,1)) ---\n")
+model3_residuals <- residuals(model3_arima_011)
+acf(model3_residuals, main = "ACF of Residuals (ARIMA(0,1,1))")
+pacf(model3_residuals, main = "PACF of Residuals (ARIMA(0,1,1))")
+qqnorm(model3_residuals, main = "Normal Q-Q Plot of Residuals (ARIMA(0,1,1))")
+qqline(model3_residuals, col = "blue")
+cat("Ljung-Box Test for Model 3 Residuals:\n")
+print(Box.test(model3_residuals, lag = log(length(model3_residuals)), type = "Ljung-Box"))
+```
+
+When using the Ljung-Box test, all model yielded high p-values ($>0.05$), confirming white noise residuals. This is a crucial diagnostic test for all ARIMA models. Therefore, in combination with the AIC and BIC values, Model #1 is still the best option. 
+
+```{r}
+#forecast next 5 values
+forecast_5_results <- forecast::forecast(model1_arima_auto, h = 5)
+
+
+print(forecast_5_results)
+
+#visual
+plot(forecast_5_results)
+
+#make pdf files for project
+pdf("forecast_5_results.pdf") 
+plot(forecast_5_results)
+dev.off() 
+```
